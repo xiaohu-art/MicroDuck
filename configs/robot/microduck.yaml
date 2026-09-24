@@ -1,4 +1,4 @@
-model_path: robot_allcollisions.xml
+model_path: robot_groundcontact.xml
 
 pos: [0.0, 0.0, 0.12]
 quat: [1.0, 0.0, 0.0, 0.0]

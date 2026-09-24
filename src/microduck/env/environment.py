@@ -38,7 +38,7 @@ class Env:
 
         # init robot
         self.motors_dof_idx = [
-            self.robot.get_joint(name).dof_idx_local
+            self.robot.get_joint(name).dofs_idx_local[0]
             for name in robot_cfg.joint_names
         ]
 
