@@ -23,8 +23,8 @@ class Env:
         self._init_buffers()
 
 
-    """Create the scene, add ground and robot, then build it."""
     def _init_scene(self, show_viewer: bool = False):
+        """Create the scene, add ground and robot, then build it."""
         self.scene = gs.Scene(
             sim_options=gs.options.SimOptions(dt=self.physics_dt),
             show_viewer=show_viewer,
@@ -32,16 +32,14 @@ class Env:
         self.scene.add_entity(gs.morphs.Plane())
         self.robot = self.scene.add_entity(
             gs.morphs.MJCF(
-                file=str(resolve_model_path(self.robot_cfg.model_path)),
-                pos=self.robot_cfg.pos,
-                quat=self.robot_cfg.quat,
+                file=str(resolve_model_path(self.robot_cfg.model_path))
             )
         )
         self.scene.build(n_envs=self.num_envs, env_spacing=(0.5, 0.5))
 
 
-    """Motor dof indices, PD gains and the robot's default state."""
     def _init_robot(self):
+        """Motor dof indices, PD gains and the robot's default state."""
         cfg = self.robot_cfg
  
         self.motor_names = [j.name for j in cfg.joints]
@@ -64,13 +62,13 @@ class Env:
         self.init_base_quat = self._tensor(cfg.quat)  # (w, x, y, z)
 
 
-    """Instantiate MDP terms from env_cfg."""
     def _init_mdp(self):
+        """Instantiate MDP terms from env_cfg."""
         self.action_term = instantiate(self.env_cfg.action, env=self)
 
 
-    """Per-env state buffers updated every step."""
     def _init_buffers(self):
+        """Per-env state buffers updated every step."""
         n, device = self.num_envs, self.device
  
         self.episode_length_buf = torch.zeros(n, dtype=gs.tc_int, device=device)
@@ -124,19 +122,36 @@ class Env:
         pass
 
 
-    def reset_idx(self):
-        pass
+    def reset_idx(self, envs_idx: torch.Tensor):
+        """Reset the given envs to the default standing state."""
+        if len(envs_idx) == 0:
+            return
+
+        n = len(envs_idx)
+
+        self.robot.set_pos(self.init_base_pos.repeat(n, 1), envs_idx=envs_idx, zero_velocity=True)
+        self.robot.set_quat(self.init_base_quat.repeat(n, 1), envs_idx=envs_idx, zero_velocity=True)
+
+        self.robot.set_dofs_position(
+            self.default_joint_pos.repeat(n, 1),
+            self.motors_dof_idx,
+            envs_idx=envs_idx,
+            zero_velocity=True
+        )
+
+        self.action_term.reset(envs_idx)
+
+        self.episode_length_buf[envs_idx] = 0
+        self.reset_buf[envs_idx] = False
+        self.time_out_buf[envs_idx] = False
 
 
     def reset(self):
-        pass
+        """Reset all envs."""
+        self.reset_idx(torch.arange(self.num_envs, device=self.device))
 
 
     def step(self):
-        pass
-
-
-    def apply_action(self):
         pass
 
 
