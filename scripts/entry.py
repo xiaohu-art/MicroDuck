@@ -20,6 +20,12 @@ def main(cfg: DictConfig):
         show_viewer=cfg.show_viewer,
     )
 
+    env.robot.set_dofs_position(env.default_joint_pos, env.motors_dof_idx)   # 初始化姿态
+    zeros = torch.zeros(env.num_envs, env.action_dim, device=env.device)
+    for i in range(250):
+        env.action_term.process(zeros)
+        env.action_term.apply()
+        env.scene.step()
 
 if __name__ == "__main__":
     main()
