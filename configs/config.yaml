@@ -1,0 +1,12 @@
+defaults:
+  - env: velocity
+  - robot: microduck
+  - _self_
+
+seed: 42
+backend: gpu
+show_viewer: false
+
+hydra:
+  job:
+    chdir: false
