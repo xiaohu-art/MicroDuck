@@ -6,7 +6,9 @@ command: null
 
 observation: null
 
-action: null
+action:
+  _target_: microduck.env.mdp.action.JointPositionAction
+  joint_names: [".*"]
 
 reward: null
 

@@ -2,6 +2,8 @@ import math
 import torch
 import genesis as gs
 
+from hydra.utils import instantiate
+
 from .mdp import *
 from ..assets import resolve_model_path
 
@@ -36,28 +38,30 @@ class Env:
             env_spacing=(0.5, 0.5),
         )
 
+        self.action_term = instantiate(env_cfg.action, env = self)
+
         # init robot
         self.motors_dof_idx = [
-            self.robot.get_joint(name).dofs_idx_local[0]
-            for name in robot_cfg.joint_names
+            self.robot.get_joint(joint.name).dofs_idx_local[0]
+            for joint in robot_cfg.joints
         ]
 
         self.robot.set_dofs_kp(
-            [robot_cfg.kp] * self.num_actions,
+            [robot_cfg.kp] * len(self.motors_dof_idx),
             self.motors_dof_idx,
         )
         self.robot.set_dofs_kv(
-            [robot_cfg.kv] * self.num_actions,
+            [robot_cfg.kv] * len(self.motors_dof_idx),
             self.motors_dof_idx,
         )
         self.robot.set_dofs_force_range(
-            [-robot_cfg.effort_limit] * self.num_actions,
-            [robot_cfg.effort_limit] * self.num_actions,
+            [-robot_cfg.effort_limit] * len(self.motors_dof_idx),
+            [robot_cfg.effort_limit] * len(self.motors_dof_idx),
             self.motors_dof_idx,
         )
 
         self.default_joint_pos = torch.tensor(
-            robot_cfg.default_joint_pos,
+            [joint.default_pos for joint in robot_cfg.joints],
             dtype=gs.tc_float,
             device=self.device,
         )
@@ -85,12 +89,12 @@ class Env:
         return self.env_cfg.sim.num_envs
 
     @property
-    def observation_space(self):
+    def observation_dim(self):
         pass
 
     @property
-    def action_space(self):
-        pass
+    def action_dim(self):
+        return self.action_term.action_dim
 
     @property
     def physics_dt(self):
