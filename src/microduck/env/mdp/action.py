@@ -27,13 +27,13 @@ class JointPositionAction:
         self.default_pos = torch.tensor(
             [default_map[name] for name in self.joint_names],
             dtype=gs.tc_float,
-            device=env.device,
+            device=self.device,
         )
 
         self.raw_actions = torch.zeros(
-            env.num_envs, self.action_dim, dtype=gs.tc_float, device=env.device
+            self.num_envs, self.action_dim, dtype=gs.tc_float, device=self.device
         )
-        self.processed_actions = self.default_pos.repeat(env.num_envs, 1)
+        self.processed_actions = self.default_pos.repeat(self.num_envs, 1)
 
 
     @property

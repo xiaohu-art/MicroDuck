@@ -50,10 +50,10 @@ class VelocityCommand:
 
 
     def reset(self, envs_idx):
-        """Report and clear metrics of `envs_idx`, then give them a new command."""
+        steps = self.env.episode_length_buf[envs_idx].clamp(min=1)
         extras = {}
         for name, value in self.metrics.items():
-            extras[name] = value[envs_idx].mean().item()
+            extras[name] = (value[envs_idx] / steps).mean().item()   # mean error per step
             value[envs_idx] = 0.0
         self._resample(envs_idx)
         return extras
@@ -104,11 +104,11 @@ class VelocityCommand:
 
 
     def _update_metrics(self):
-        max_command_steps = self.resampling_time_range[1] / self.env.step_dt
         lin_err = torch.norm(self.vel_command_b[:, :2] - self.env.base_lin_vel[:, :2], dim=-1)
         yaw_err = torch.abs(self.vel_command_b[:, 2] - self.env.base_ang_vel[:, 2])
-        self.metrics["error_vel_xy"] += lin_err / max_command_steps
-        self.metrics["error_vel_yaw"] += yaw_err / max_command_steps
+        self.metrics["error_vel_xy"] += lin_err       # plain sum
+        self.metrics["error_vel_yaw"] += yaw_err
+
  
     def _uniform(self, n: int, bounds: tuple[float, float]) -> torch.Tensor:
         lo, hi = bounds

@@ -165,8 +165,32 @@ class Env:
         self.reset_idx(torch.arange(self.num_envs, device=self.device))
 
 
-    def step(self):
-        pass
+    def step(self, actions):
+        self.extras = {}
+        self.action_term.process(actions)
+        for _ in range(self.env_cfg.sim.decimation):
+            self.action_term.apply()
+            self.scene.step()
+        self.episode_length_buf += 1
+        self._update_robot_state()
+
+        # termination todo
+        self.time_out_buf = self.episode_length_buf >= self.max_episode_length
+        fallen = self.base_pos[:, 2] < 0.06
+        self.reset_buf = self.time_out_buf | fallen
+
+        # reward todo
+        self.rew_buf[:] = 0.0
+
+        dones = self.reset_buf.clone()
+        self.extras["time_outs"] = self.time_out_buf.clone()
+
+        self.reset_idx(self.reset_buf.nonzero(as_tuple=False).flatten())
+        self.command_term.compute(self.step_dt)
+        
+        # observation todo
+        obs = None
+        return obs, self.rew_buf, dones, self.extras
 
 
     def get_observations(self):
