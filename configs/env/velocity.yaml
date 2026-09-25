@@ -12,11 +12,30 @@ command:
   standing_prob: 0.1
   turn_in_place_prob: 0.15
 
-observation: null
-
 action:
   _target_: microduck.env.mdp.action.JointPositionAction
   joint_names: [".*"]
+
+observation:
+  policy:
+    _target_: microduck.env.mdp.observation.ObservationGroup
+    terms:
+      base_ang_vel: {}
+      projected_gravity: {}
+      command: {func: velocity_command}
+      joint_pos: {func: joint_pos_rel}
+      joint_vel: {}
+      last_action: {}
+  critic:
+    _target_: microduck.env.mdp.observation.ObservationGroup
+    terms:
+      base_lin_vel: {}          # privileged: critic only
+      base_ang_vel: {}
+      projected_gravity: {}
+      command: {func: velocity_command}
+      joint_pos: {func: joint_pos_rel}
+      joint_vel: {}
+      last_action: {}
 
 reward: null
 

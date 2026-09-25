@@ -24,6 +24,8 @@ class Env:
         self._init_mdp()
         self._init_buffers()
 
+        self._update_robot_state()
+
 
     def _init_scene(self, show_viewer: bool = False):
         """Create the scene, add ground and robot, then build it."""
@@ -69,6 +71,11 @@ class Env:
         self.command_term = instantiate(self.env_cfg.command, env=self)
         self.action_term = instantiate(self.env_cfg.action, env=self)
 
+        self.observation_group = {
+            name: instantiate(group_cfg, env=self)
+            for name, group_cfg in self.env_cfg.observation.items()
+        }
+
 
     def _init_buffers(self):
         """Per-env state buffers updated every step."""
@@ -94,7 +101,7 @@ class Env:
 
     @property
     def observation_dim(self):
-        raise NotImplementedError
+        raise {name: g.dim for name, g in self.observation_group.items()}
 
 
     @property
@@ -163,6 +170,7 @@ class Env:
     def reset(self):
         """Reset all envs."""
         self.reset_idx(torch.arange(self.num_envs, device=self.device))
+        return self.get_observations()
 
 
     def step(self, actions):
@@ -188,22 +196,9 @@ class Env:
         self.reset_idx(self.reset_buf.nonzero(as_tuple=False).flatten())
         self.command_term.compute(self.step_dt)
         
-        # observation todo
-        obs = None
+        obs = self.get_observations()
         return obs, self.rew_buf, dones, self.extras
 
 
     def get_observations(self):
-        pass
-
-
-    def get_states(self):
-        pass
-
-
-    def get_rewards(self):
-        pass
-
-
-    def get_dones(self):
-        pass
+        return {name: g.compute() for name, g in self.observation_group.items()}
