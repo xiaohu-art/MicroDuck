@@ -37,8 +37,18 @@ class JointPositionAction:
 
 
     @property
-    def action_dim(self) -> int:
+    def action_dim(self):
         return len(self.dofs_idx)
+
+
+    @property
+    def device(self):
+        return self.env.device
+
+
+    @property
+    def num_envs(self):
+        return self.env.num_envs
 
 
     def process(self, action: torch.Tensor):

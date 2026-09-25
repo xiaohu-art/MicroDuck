@@ -3,6 +3,8 @@ import torch
 import genesis as gs
 
 from hydra.utils import instantiate
+from genesis.utils.geom import inv_quat, transform_by_quat
+
 
 from .mdp import *
 from ..assets import resolve_model_path
@@ -64,6 +66,7 @@ class Env:
 
     def _init_mdp(self):
         """Instantiate MDP terms from env_cfg."""
+        self.command_term = instantiate(self.env_cfg.command, env=self)
         self.action_term = instantiate(self.env_cfg.action, env=self)
 
 
@@ -78,6 +81,7 @@ class Env:
  
         self.gravity_vec = self._tensor([0.0, 0.0, -1.0]).repeat(n, 1)
 
+        self.extras = {}
 
     def _tensor(self, data) -> torch.Tensor:
         return torch.tensor(list(data), dtype=gs.tc_float, device=self.device)
@@ -118,8 +122,15 @@ class Env:
         return math.ceil(self.env_cfg.sim.episode_length_s / self.step_dt)
 
 
-    def resample_command(self):
-        pass
+    def _update_robot_state(self):
+        self.base_pos = self.robot.get_pos()
+        self.base_quat = self.robot.get_quat()
+        inv_q = inv_quat(self.base_quat)
+        self.base_lin_vel = transform_by_quat(self.robot.get_vel(), inv_q)   # body frame
+        self.base_ang_vel = transform_by_quat(self.robot.get_ang(), inv_q)   # body frame
+        self.projected_gravity = transform_by_quat(self.gravity_vec, inv_q)
+        self.dof_pos = self.robot.get_dofs_position(self.motors_dof_idx)
+        self.dof_vel = self.robot.get_dofs_velocity(self.motors_dof_idx)
 
 
     def reset_idx(self, envs_idx: torch.Tensor):
@@ -140,10 +151,13 @@ class Env:
         )
 
         self.action_term.reset(envs_idx)
+        self.extras["episode"] = self.command_term.reset(envs_idx)   # metrics for logging
 
         self.episode_length_buf[envs_idx] = 0
         self.reset_buf[envs_idx] = False
         self.time_out_buf[envs_idx] = False
+
+        self._update_robot_state()
 
 
     def reset(self):

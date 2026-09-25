@@ -2,7 +2,15 @@ defaults:
   - base
   - _self_
 
-command: null
+command:
+  _target_: microduck.env.mdp.command.VelocityCommand
+  ranges:
+    lin_vel_x: [-0.4, 0.4]
+    lin_vel_y: [-0.3, 0.3]
+    ang_vel_z: [-1.0, 1.0]
+  resample: [3.0, 8.0]
+  standing_prob: 0.1
+  turn_in_place_prob: 0.15
 
 observation: null
 
