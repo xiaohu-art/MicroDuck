@@ -11,7 +11,7 @@ class VelocityCommand:
         resample,
         standing_prob: float = 0.1,
         turn_in_place_prob: float = 0.15
-    ):
+    ) -> None:
         self.env = env
 
         self.lin_vel_x = tuple(float(v) for v in ranges["lin_vel_x"])
@@ -34,22 +34,22 @@ class VelocityCommand:
 
 
     @property
-    def command(self):
+    def command(self) -> torch.Tensor:
         """(num_envs, 3): vx, vy [m/s] and wz [rad/s] in the base frame."""
         return self.vel_command_b
 
 
     @property
-    def device(self):
+    def device(self) -> torch.device:
         return self.env.device
     
 
     @property
-    def num_envs(self):
+    def num_envs(self) -> int:
         return self.env.num_envs
 
 
-    def reset(self, envs_idx):
+    def reset(self, envs_idx: torch.Tensor) -> dict[str, float]:
         steps = self.env.episode_length_buf[envs_idx].clamp(min=1)
         extras = {}
         for name, value in self.metrics.items():
@@ -59,7 +59,7 @@ class VelocityCommand:
         return extras
 
 
-    def compute(self, dt: float):
+    def compute(self, dt: float) -> None:
         """Advance timers by `dt` and resample expired envs. Call once per env step."""
         self._update_metrics()
         self.time_left -= dt
@@ -67,7 +67,7 @@ class VelocityCommand:
         self._resample(expired)
 
 
-    def _resample(self, envs_idx: torch.Tensor):
+    def _resample(self, envs_idx: torch.Tensor) -> None:
         """Draw a new timer and a new command for `envs_idx`."""
         if len(envs_idx) == 0:
             return
@@ -75,7 +75,7 @@ class VelocityCommand:
         self._resample_command(envs_idx)
 
 
-    def _resample_command(self, envs_idx: torch.Tensor):
+    def _resample_command(self, envs_idx: torch.Tensor) -> None:
         n = len(envs_idx)
  
         # Default bucket: independent uniform sampling.
@@ -103,7 +103,7 @@ class VelocityCommand:
             self.vel_command_b[turn_idx, 2] = sign * magnitude
 
 
-    def _update_metrics(self):
+    def _update_metrics(self) -> None:
         lin_err = torch.norm(self.vel_command_b[:, :2] - self.env.base_lin_vel[:, :2], dim=-1)
         yaw_err = torch.abs(self.vel_command_b[:, 2] - self.env.base_ang_vel[:, 2])
         self.metrics["error_vel_xy"] += lin_err       # plain sum

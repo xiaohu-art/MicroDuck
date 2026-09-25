@@ -1,0 +1,31 @@
+num_steps_per_env: 24
+max_iterations: 1500
+save_interval: 100
+
+obs_groups:
+  actor: [policy]
+  critic: [critic]
+
+actor:
+  hidden_dims: [512, 256, 128]
+  activation: elu
+  obs_normalization: true
+  distribution: {init_std: 1.0, std_type: scalar}
+critic:
+  hidden_dims: [512, 256, 128]
+  activation: elu
+  obs_normalization: true
+
+algorithm:
+  gamma: 0.99
+  lam: 0.95
+  clip_param: 0.2
+  num_learning_epochs: 5
+  num_mini_batches: 4
+  learning_rate: 1.0e-3
+  schedule: adaptive
+  desired_kl: 0.01
+  entropy_coef: 0.01
+  value_loss_coef: 1.0
+  use_clipped_value_loss: true
+  max_grad_norm: 1.0

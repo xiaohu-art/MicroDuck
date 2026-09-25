@@ -15,7 +15,7 @@ class Env:
         env_cfg,
         robot_cfg,
         show_viewer=False,
-    ):
+    ) -> None:
         self.env_cfg = env_cfg
         self.robot_cfg = robot_cfg
 
@@ -27,7 +27,7 @@ class Env:
         self._update_robot_state()
 
 
-    def _init_scene(self, show_viewer: bool = False):
+    def _init_scene(self, show_viewer: bool = False) -> None:
         """Create the scene, add ground and robot, then build it."""
         self.scene = gs.Scene(
             sim_options=gs.options.SimOptions(dt=self.physics_dt),
@@ -42,7 +42,7 @@ class Env:
         self.scene.build(n_envs=self.num_envs, env_spacing=(0.5, 0.5))
 
 
-    def _init_robot(self):
+    def _init_robot(self) -> None:
         """Motor dof indices, PD gains and the robot's default state."""
         cfg = self.robot_cfg
  
@@ -66,7 +66,7 @@ class Env:
         self.init_base_quat = self._tensor(cfg.quat)  # (w, x, y, z)
 
 
-    def _init_mdp(self):
+    def _init_mdp(self) -> None:
         """Instantiate MDP terms from env_cfg."""
         self.command_term = instantiate(self.env_cfg.command, env=self)
         self.action_term = instantiate(self.env_cfg.action, env=self)
@@ -77,7 +77,7 @@ class Env:
         }
 
 
-    def _init_buffers(self):
+    def _init_buffers(self) -> None:
         """Per-env state buffers updated every step."""
         n, device = self.num_envs, self.device
  
@@ -95,41 +95,41 @@ class Env:
 
 
     @property
-    def num_envs(self):
+    def num_envs(self) -> int:
         return self.env_cfg.sim.num_envs
 
 
     @property
-    def observation_dim(self):
-        raise {name: g.dim for name, g in self.observation_group.items()}
+    def observation_dim(self) -> dict[str, int]:
+        return {name: g.dim for name, g in self.observation_group.items()}
 
 
     @property
-    def action_dim(self):
+    def action_dim(self) -> int:
         return self.action_term.action_dim
 
 
     @property
-    def physics_dt(self):
+    def physics_dt(self) -> float:
         return self.env_cfg.sim.physics_dt
 
 
     @property
-    def step_dt(self):
+    def step_dt(self) -> float:
         return self.env_cfg.sim.physics_dt * self.env_cfg.sim.decimation
 
 
     @property
-    def device(self):
+    def device(self) -> torch.device:
         return gs.device
 
 
     @property
-    def max_episode_length(self):
+    def max_episode_length(self) -> int:
         return math.ceil(self.env_cfg.sim.episode_length_s / self.step_dt)
 
 
-    def _update_robot_state(self):
+    def _update_robot_state(self) -> None:
         self.base_pos = self.robot.get_pos()
         self.base_quat = self.robot.get_quat()
         inv_q = inv_quat(self.base_quat)
@@ -140,7 +140,7 @@ class Env:
         self.dof_vel = self.robot.get_dofs_velocity(self.motors_dof_idx)
 
 
-    def reset_idx(self, envs_idx: torch.Tensor):
+    def reset_idx(self, envs_idx: torch.Tensor) -> None:
         """Reset the given envs to the default standing state."""
         if len(envs_idx) == 0:
             return
@@ -167,13 +167,15 @@ class Env:
         self._update_robot_state()
 
 
-    def reset(self):
+    def reset(self) -> dict[str, torch.Tensor]:
         """Reset all envs."""
         self.reset_idx(torch.arange(self.num_envs, device=self.device))
         return self.get_observations()
 
 
-    def step(self, actions):
+    def step(
+        self, actions
+    ) -> tuple[dict[str, torch.Tensor], torch.Tensor, torch.Tensor, dict]:
         self.extras = {}
         self.action_term.process(actions)
         for _ in range(self.env_cfg.sim.decimation):
@@ -200,5 +202,5 @@ class Env:
         return obs, self.rew_buf, dones, self.extras
 
 
-    def get_observations(self):
+    def get_observations(self) -> dict[str, torch.Tensor]:
         return {name: g.compute() for name, g in self.observation_group.items()}

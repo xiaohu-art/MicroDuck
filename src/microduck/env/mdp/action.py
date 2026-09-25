@@ -12,7 +12,7 @@ class JointPositionAction:
         joint_names, 
         scale: float = 1.0, 
         clip: float | None = 1.0
-    ):
+    ) -> None:
         self.env = env
         self.scale = scale
         self.clip = clip
@@ -37,21 +37,21 @@ class JointPositionAction:
 
 
     @property
-    def action_dim(self):
+    def action_dim(self) -> int:
         return len(self.dofs_idx)
 
 
     @property
-    def device(self):
+    def device(self) -> torch.device:
         return self.env.device
 
 
     @property
-    def num_envs(self):
+    def num_envs(self) -> int:
         return self.env.num_envs
 
 
-    def process(self, action: torch.Tensor):
+    def process(self, action: torch.Tensor) -> None:
         """Convert policy output to joint targets. Call once per env step."""
         if self.clip is not None:
             action = torch.clamp(action, -self.clip, self.clip)
@@ -59,11 +59,11 @@ class JointPositionAction:
         self.processed_actions[:] = self.default_pos + self.raw_actions * self.scale
 
 
-    def apply(self):
+    def apply(self) -> None:
         """Send joint targets to the PD controllers. Call once per physics step."""
         self.env.robot.control_dofs_position(self.processed_actions, self.dofs_idx)
 
 
-    def reset(self, envs_idx: torch.Tensor):
+    def reset(self, envs_idx: torch.Tensor) -> None:
         self.raw_actions[envs_idx] = 0.0
         self.processed_actions[envs_idx] = self.default_pos

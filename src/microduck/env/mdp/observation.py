@@ -64,7 +64,7 @@ class ObservationGroup:
           some_term: {func: some_fn, params: {k: v}}
     """
 
-    def __init__(self, env, terms: dict):
+    def __init__(self, env, terms: dict) -> None:
         self.env = env
         self.term_names: list[str] = []
         self.term_funcs = []
