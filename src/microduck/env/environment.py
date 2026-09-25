@@ -174,7 +174,7 @@ class Env:
 
 
     def step(
-        self, actions
+        self, actions: torch.Tensor,
     ) -> tuple[dict[str, torch.Tensor], torch.Tensor, torch.Tensor, dict]:
         self.extras = {}
         self.action_term.process(actions)

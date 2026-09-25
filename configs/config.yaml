@@ -1,6 +1,7 @@
 defaults:
   - env: velocity
   - robot: microduck
+  - algo: ppo
   - _self_
 
 seed: 42

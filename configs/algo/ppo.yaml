@@ -10,7 +10,10 @@ actor:
   hidden_dims: [512, 256, 128]
   activation: elu
   obs_normalization: true
-  distribution: {init_std: 1.0, std_type: scalar}
+  distribution_cfg:
+    class_name: GaussianDistribution
+    init_std: 1.0
+    std_type: scalar
 critic:
   hidden_dims: [512, 256, 128]
   activation: elu
