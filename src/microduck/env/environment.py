@@ -31,6 +31,12 @@ class Env:
         """Create the scene, add ground and robot, then build it."""
         self.scene = gs.Scene(
             sim_options=gs.options.SimOptions(dt=self.physics_dt),
+            # The robot is ~15 cm tall: put the camera close to it.
+            viewer_options=gs.options.ViewerOptions(
+                camera_pos=(0.6, -0.6, 0.35),
+                camera_lookat=(0.0, 0.0, 0.1),
+                camera_fov=40,
+            ),
             show_viewer=show_viewer,
         )
         self.scene.add_entity(gs.morphs.Plane())
@@ -40,6 +46,8 @@ class Env:
             )
         )
         self.scene.build(n_envs=self.num_envs, env_spacing=(0.5, 0.5))
+        if show_viewer:
+            self.scene.viewer.follow_entity(self.robot)
 
 
     def _init_robot(self) -> None:
