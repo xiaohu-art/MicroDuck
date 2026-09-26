@@ -37,6 +37,18 @@ observation:
       joint_vel: {}
       last_action: {}
 
-reward: null
+reward:
+  _target_: microduck.env.mdp.reward.RewardManager
+  terms:
+    track_lin_vel_xy: {weight: 2.0, params: {std: 0.316}}   # sqrt(0.1)
+    track_ang_vel_z:  {weight: 2.0, params: {std: 0.707}}   # sqrt(0.5)
+    upright:          {weight: 2.0, params: {std: 0.224}}   # sqrt(0.05)
+    action_rate_l2:   {weight: -0.1}
 
-termination: null
+termination:
+  _target_: microduck.env.mdp.termination.TerminationManager
+  terms:
+    time_out: {time_out: true}
+    fell_over: {func: bad_orientation, params: {limit_angle: 1.22}}   # 70 deg
+    nan_state: {}
+    # base_height: {func: root_height_below, params: {min_height: 0.06}}

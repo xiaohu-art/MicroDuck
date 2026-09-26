@@ -21,10 +21,10 @@ class PPO:
     Args:
         env: Environment providing observations, actions, device, and episode state.
         cfg: Algorithm configuration.
-        log_dir: TensorBoard and checkpoint directory, or ``None``.
+        log_dir: Directory for TensorBoard logs and checkpoints.
     """
 
-    def __init__(self, env, cfg, log_dir: str | None = None) -> None:
+    def __init__(self, env, cfg, log_dir: str) -> None:
         self.env = env
         self.cfg = cfg
         self.device = env.device
@@ -243,11 +243,10 @@ class PPO:
                 learning_rate=self.learning_rate,
                 action_std=self.actor.output_std,
             )
-            if self.log_dir is not None and it % self.save_interval == 0:
+            if it % self.save_interval == 0:
                 self.save(os.path.join(self.log_dir, f"model_{it}.pt"))
 
-        if self.log_dir is not None:
-            self.save(os.path.join(self.log_dir, f"model_{self.current_learning_iteration}.pt"))
+        self.save(os.path.join(self.log_dir, f"model_{self.current_learning_iteration}.pt"))
         self.logger.close()
 
     def save(self, path: str, infos: dict | None = None) -> None:

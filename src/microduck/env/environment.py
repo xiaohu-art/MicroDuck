@@ -75,6 +75,8 @@ class Env:
             name: instantiate(group_cfg, env=self)
             for name, group_cfg in self.env_cfg.observation.items()
         }
+        self.reward_manager = instantiate(self.env_cfg.reward, env=self)
+        self.termination_manager = instantiate(self.env_cfg.termination, env=self)
 
 
     def _init_buffers(self) -> None:
@@ -157,8 +159,14 @@ class Env:
             zero_velocity=True
         )
 
+        # Episode statistics for logging. Must run before episode_length_buf is cleared.
+        episode = {}
+        episode.update(self.reward_manager.reset(envs_idx))
+        episode.update(self.termination_manager.reset(envs_idx))
+        episode.update({f"Metrics/{k}": v for k, v in self.command_term.reset(envs_idx).items()})
+        self.extras["episode"] = episode
+
         self.action_term.reset(envs_idx)
-        self.extras["episode"] = self.command_term.reset(envs_idx)   # metrics for logging
 
         self.episode_length_buf[envs_idx] = 0
         self.reset_buf[envs_idx] = False
@@ -184,20 +192,18 @@ class Env:
         self.episode_length_buf += 1
         self._update_robot_state()
 
-        # termination todo
-        self.time_out_buf = self.episode_length_buf >= self.max_episode_length
-        fallen = self.base_pos[:, 2] < 0.06
-        self.reset_buf = self.time_out_buf | fallen
-
-        # reward todo
-        self.rew_buf[:] = 0.0
+        # Termination, then reward.
+        self.reset_buf = self.termination_manager.compute()
+        self.time_out_buf = self.termination_manager.time_outs
+        self.rew_buf = self.reward_manager.compute(self.step_dt)
 
         dones = self.reset_buf.clone()
-        self.extras["time_outs"] = self.time_out_buf.clone()
+        if not self.env_cfg.is_finite_horizon:
+            self.extras["time_outs"] = self.time_out_buf.clone()
 
         self.reset_idx(self.reset_buf.nonzero(as_tuple=False).flatten())
-        self.command_term.compute(self.step_dt)
-        
+        self.command_term.compute(self.step_dt)   # timer-based resampling
+
         obs = self.get_observations()
         return obs, self.rew_buf, dones, self.extras
 

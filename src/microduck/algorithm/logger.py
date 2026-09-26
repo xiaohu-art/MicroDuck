@@ -1,29 +1,23 @@
-"""Training metrics logger with optional TensorBoard output."""
+"""Training metrics logger: TensorBoard scalars + console summary."""
 
 import statistics
 import time
 from collections import deque
 
 import torch
+from torch.utils.tensorboard import SummaryWriter
 
 __all__ = ["Logger"]
 
 
 class Logger:
-    def __init__(self, log_dir: str | None, num_envs: int, num_steps_per_env: int, device) -> None:
+    def __init__(self, log_dir: str, num_envs: int, num_steps_per_env: int, device) -> None:
         self.log_dir = log_dir
         self.num_envs = num_envs
         self.num_steps_per_env = num_steps_per_env
         self.device = device
 
-        self.writer = None
-        if log_dir is not None:
-            try:
-                from torch.utils.tensorboard import SummaryWriter
-
-                self.writer = SummaryWriter(log_dir=log_dir, flush_secs=10)
-            except ImportError:
-                print("[Logger] tensorboard is not installed, logging to console only")
+        self.writer = SummaryWriter(log_dir=log_dir, flush_secs=10)
 
         self.rewbuffer: deque[float] = deque(maxlen=100)
         self.lenbuffer: deque[float] = deque(maxlen=100)
@@ -91,9 +85,8 @@ class Logger:
             scalars["Train/mean_reward"] = statistics.mean(self.rewbuffer)
             scalars["Train/mean_episode_length"] = statistics.mean(self.lenbuffer)
 
-        if self.writer is not None:
-            for key, value in scalars.items():
-                self.writer.add_scalar(key, value, it)
+        for key, value in scalars.items():
+            self.writer.add_scalar(key, value, it)
 
         # Console summary.
         pad = 32
@@ -102,7 +95,7 @@ class Logger:
             if key in scalars:
                 lines.append(f"{key + ':':>{pad}} {scalars[key]:.3f}")
         for key, value in scalars.items():
-            if key.startswith(("Loss/", "Policy/", "Episode/")):
+            if key.startswith(("Loss/", "Policy/", "Episode", "Metrics/")):
                 lines.append(f"{key + ':':>{pad}} {value:.4g}")
         lines.append(f"{'Perf/fps:':>{pad}} {fps} (collect {collect_time:.2f}s, learn {learn_time:.2f}s)")
         lines.append(f"{'Total timesteps:':>{pad}} {self.tot_timesteps}")
@@ -111,5 +104,4 @@ class Logger:
         print("\n".join(lines))
 
     def close(self) -> None:
-        if self.writer is not None:
-            self.writer.close()
+        self.writer.close()
