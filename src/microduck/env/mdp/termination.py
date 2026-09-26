@@ -2,8 +2,6 @@
 
 import torch
 
-from .term import resolve_terms
-
 __all__ = [
     "TerminationManager",
     "time_out",
@@ -53,13 +51,33 @@ class TerminationManager:
 
     def __init__(self, env, terms: dict) -> None:
         self.env = env
-        self.terms = resolve_terms(terms, _TERMINATION_FUNCTIONS, {"time_out": False})
-        self.term_names = [t.name for t in self.terms]
+        self.term_names: list[str] = []
+        self.term_funcs = []
+        self.term_params: list[dict] = []
+        self.term_time_outs: list[bool] = []
+
+        # Parse {name: {func, params, time_out}}; `func` defaults to the term name.
+        for name, term_cfg in terms.items():
+            term_cfg = dict(term_cfg or {})
+            func_name = term_cfg.pop("func", name)
+            if func_name not in _TERMINATION_FUNCTIONS:
+                raise ValueError(
+                    f"Unknown termination function '{func_name}' (term '{name}'), "
+                    f"expected one of {sorted(_TERMINATION_FUNCTIONS)}"
+                )
+            params = dict(term_cfg.pop("params", None) or {})
+            time_out = bool(term_cfg.pop("time_out", False))
+            if term_cfg:
+                raise ValueError(f"Unknown keys in termination term '{name}': {list(term_cfg)}")
+            self.term_names.append(name)
+            self.term_funcs.append(_TERMINATION_FUNCTIONS[func_name])
+            self.term_params.append(params)
+            self.term_time_outs.append(time_out)
 
         n, dev = env.num_envs, env.device
         self._terminated = torch.zeros(n, dtype=torch.bool, device=dev)
         self._time_outs = torch.zeros(n, dtype=torch.bool, device=dev)
-        self._term_dones = torch.zeros(n, len(self.terms), dtype=torch.bool, device=dev)
+        self._term_dones = torch.zeros(n, len(self.term_names), dtype=torch.bool, device=dev)
         # Which terms ended each env's last episode (kept until logged on reset).
         self._last_episode_dones = torch.zeros_like(self._term_dones)
 
@@ -81,9 +99,11 @@ class TerminationManager:
         """Evaluate terms and return combined done flags."""
         self._terminated[:] = False
         self._time_outs[:] = False
-        for i, term in enumerate(self.terms):
-            value = term.func(self.env, **term.params)
-            if term.extra["time_out"]:
+        for i, (func, params, is_time_out) in enumerate(
+            zip(self.term_funcs, self.term_params, self.term_time_outs)
+        ):
+            value = func(self.env, **params)
+            if is_time_out:
                 self._time_outs |= value
             else:
                 self._terminated |= value
@@ -94,7 +114,7 @@ class TerminationManager:
         return self.dones
 
     def reset(self, envs_idx: torch.Tensor) -> dict[str, float]:
-        """Return termination rates for the selected environments."""
+        """Return termination rates for selected environments."""
         extras = {
             f"Episode_Termination/{name}": self._last_episode_dones[envs_idx, i].float().mean().item()
             for i, name in enumerate(self.term_names)
@@ -103,5 +123,8 @@ class TerminationManager:
         return extras
 
     def __repr__(self) -> str:
-        rows = [f"  {t.name:<20} {t.func.__name__:<20} time_out={t.extra['time_out']}" for t in self.terms]
+        rows = [
+            f"  {n:<20} {f.__name__:<20} time_out={t}"
+            for n, f, t in zip(self.term_names, self.term_funcs, self.term_time_outs)
+        ]
         return "TerminationManager(\n" + "\n".join(rows) + "\n)"

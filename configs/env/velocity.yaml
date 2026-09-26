@@ -17,18 +17,16 @@ action:
   joint_names: [".*"]
 
 observation:
-  policy:
-    _target_: microduck.env.mdp.observation.ObservationGroup
-    terms:
+  _target_: microduck.env.mdp.observation.ObservationManager
+  groups:
+    policy:
       base_ang_vel: {}
       projected_gravity: {}
       command: {func: velocity_command}
       joint_pos: {func: joint_pos_rel}
       joint_vel: {}
       last_action: {}
-  critic:
-    _target_: microduck.env.mdp.observation.ObservationGroup
-    terms:
+    critic:
       base_lin_vel: {}          # privileged: critic only
       base_ang_vel: {}
       projected_gravity: {}

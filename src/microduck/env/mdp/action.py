@@ -34,6 +34,8 @@ class JointPositionAction:
             self.num_envs, self.action_dim, dtype=gs.tc_float, device=self.device
         )
         self.processed_actions = self.default_pos.repeat(self.num_envs, 1)
+        # Previous step's raw_actions, for the action-rate reward.
+        self.prev_actions = torch.zeros_like(self.raw_actions)
 
 
     @property
@@ -55,6 +57,7 @@ class JointPositionAction:
         """Convert policy output to joint targets. Call once per env step."""
         if self.clip is not None:
             action = torch.clamp(action, -self.clip, self.clip)
+        self.prev_actions[:] = self.raw_actions
         self.raw_actions[:] = action
         self.processed_actions[:] = self.default_pos + self.raw_actions * self.scale
 
@@ -66,4 +69,5 @@ class JointPositionAction:
 
     def reset(self, envs_idx: torch.Tensor) -> None:
         self.raw_actions[envs_idx] = 0.0
+        self.prev_actions[envs_idx] = 0.0
         self.processed_actions[envs_idx] = self.default_pos

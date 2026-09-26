@@ -71,10 +71,7 @@ class Env:
         self.command_term = instantiate(self.env_cfg.command, env=self)
         self.action_term = instantiate(self.env_cfg.action, env=self)
 
-        self.observation_group = {
-            name: instantiate(group_cfg, env=self)
-            for name, group_cfg in self.env_cfg.observation.items()
-        }
+        self.observation_manager = instantiate(self.env_cfg.observation, env=self)
         self.reward_manager = instantiate(self.env_cfg.reward, env=self)
         self.termination_manager = instantiate(self.env_cfg.termination, env=self)
 
@@ -103,7 +100,7 @@ class Env:
 
     @property
     def observation_dim(self) -> dict[str, int]:
-        return {name: g.dim for name, g in self.observation_group.items()}
+        return self.observation_manager.group_dims
 
 
     @property
@@ -209,4 +206,4 @@ class Env:
 
 
     def get_observations(self) -> dict[str, torch.Tensor]:
-        return {name: g.compute() for name, g in self.observation_group.items()}
+        return self.observation_manager.compute()

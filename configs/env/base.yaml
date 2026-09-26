@@ -3,3 +3,5 @@ sim:
   physics_dt: 0.005
   decimation: 4
   episode_length_s: 10.0
+
+is_finite_horizon: false

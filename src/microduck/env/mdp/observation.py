@@ -1,7 +1,9 @@
+"""Observation terms and grouped observation manager."""
+
 import torch
 
 __all__ = [
-    "ObservationGroup",
+    "ObservationManager",
     "base_lin_vel",
     "base_ang_vel",
     "projected_gravity",
@@ -16,92 +18,119 @@ __all__ = [
 # Observation terms: fn(env, **params) -> (num_envs, dim)
 # ----------------------------------------------------------------------
 def base_lin_vel(env) -> torch.Tensor:
-    """Base linear velocity in the base frame."""
+    """Return base linear velocity in the base frame."""
     return env.base_lin_vel
 
 
 def base_ang_vel(env) -> torch.Tensor:
-    """Base angular velocity in the base frame (gyroscope)."""
+    """Return base angular velocity in the base frame."""
     return env.base_ang_vel
 
 
 def projected_gravity(env) -> torch.Tensor:
-    """Gravity direction in the base frame; (0, 0, -1) when upright."""
+    """Return gravity direction in the base frame."""
     return env.projected_gravity
 
 
 def velocity_command(env) -> torch.Tensor:
-    """Commanded (vx, vy, wz) in the base frame."""
+    """Return the commanded ``(vx, vy, wz)`` values."""
     return env.command_term.command
 
 
 def joint_pos_rel(env) -> torch.Tensor:
-    """Joint positions relative to the default pose."""
+    """Return joint positions relative to the default pose."""
     return env.dof_pos - env.default_joint_pos
 
 
 def joint_vel(env) -> torch.Tensor:
-    """Joint velocities."""
+    """Return joint velocities."""
     return env.dof_vel
 
 
 def last_action(env) -> torch.Tensor:
-    """Clipped policy output of the previous step."""
+    """Return the previous clipped policy action."""
     return env.action_term.raw_actions
 
 
+_OBSERVATION_FUNCTIONS = {
+    "base_lin_vel": base_lin_vel,
+    "base_ang_vel": base_ang_vel,
+    "projected_gravity": projected_gravity,
+    "velocity_command": velocity_command,
+    "joint_pos_rel": joint_pos_rel,
+    "joint_vel": joint_vel,
+    "last_action": last_action,
+}
+
+
 # ----------------------------------------------------------------------
-# Observation group: concatenates terms in the order listed in the config.
+# Manager
 # ----------------------------------------------------------------------
-class ObservationGroup:
-    """A named list of observation terms, concatenated along the last dim.
+class ObservationManager:
+    """Compute configured observation groups by concatenating their terms."""
 
-    Config format (key = term name, `func` defaults to the key):
-
-        terms:
-          base_ang_vel: {}
-          joint_pos: {func: joint_pos_rel}
-          some_term: {func: some_fn, params: {k: v}}
-    """
-
-    def __init__(self, env, terms: dict) -> None:
+    def __init__(self, env, groups: dict) -> None:
         self.env = env
-        self.term_names: list[str] = []
-        self.term_funcs = []
-        self.term_params: list[dict] = []
+        # {group: [term names]}, {group: [funcs]}, {group: [params]}
+        self.term_names: dict[str, list[str]] = {}
+        self.term_funcs: dict[str, list] = {}
+        self.term_params: dict[str, list[dict]] = {}
 
-        for name, term_cfg in terms.items():
-            term_cfg = dict(term_cfg or {})
-            func_name = term_cfg.pop("func", name)
-            params = dict(term_cfg.pop("params", {}) or {})
-            if term_cfg:
-                raise ValueError(f"Unknown keys in observation term '{name}': {list(term_cfg)}")
-            func = globals().get(func_name)
-            if func is None or func_name not in __all__:
-                raise ValueError(f"Unknown observation function '{func_name}' (term '{name}')")
-            self.term_names.append(name)
-            self.term_funcs.append(func)
-            self.term_params.append(params)
+        for group, terms in groups.items():
+            if not terms:
+                raise ValueError(f"Observation group '{group}' has no terms")
+            self.term_names[group], self.term_funcs[group], self.term_params[group] = [], [], []
 
-        self._term_dims: list[int] | None = None
+            # Parse {name: {func, params}}; `func` defaults to the term name.
+            for name, term_cfg in terms.items():
+                term_cfg = dict(term_cfg or {})
+                func_name = term_cfg.pop("func", name)
+                if func_name not in _OBSERVATION_FUNCTIONS:
+                    raise ValueError(
+                        f"Unknown observation function '{func_name}' (term '{group}/{name}'), "
+                        f"expected one of {sorted(_OBSERVATION_FUNCTIONS)}"
+                    )
+                params = dict(term_cfg.pop("params", None) or {})
+                if term_cfg:
+                    raise ValueError(f"Unknown keys in observation term '{group}/{name}': {list(term_cfg)}")
+                self.term_names[group].append(name)
+                self.term_funcs[group].append(_OBSERVATION_FUNCTIONS[func_name])
+                self.term_params[group].append(params)
 
-    def compute(self) -> torch.Tensor:
-        return torch.cat(
-            [f(self.env, **p) for f, p in zip(self.term_funcs, self.term_params)], dim=-1
-        )
+        self._term_dims: dict[str, list[int]] | None = None
 
     @property
-    def term_dims(self) -> list[int]:
+    def group_names(self) -> list[str]:
+        return list(self.term_names)
+
+    def compute_group(self, group: str) -> torch.Tensor:
+        """Return one group with shape ``(num_envs, group_dim)``."""
+        return torch.cat(
+            [f(self.env, **p) for f, p in zip(self.term_funcs[group], self.term_params[group])], dim=-1
+        )
+
+    def compute(self) -> dict[str, torch.Tensor]:
+        """Return all groups and their concatenated tensors."""
+        return {group: self.compute_group(group) for group in self.term_names}
+
+    @property
+    def term_dims(self) -> dict[str, list[int]]:
+        """Return the width of each term, computed lazily."""
         if self._term_dims is None:
-            self._term_dims = [
-                f(self.env, **p).shape[-1] for f, p in zip(self.term_funcs, self.term_params)
-            ]
+            self._term_dims = {
+                group: [f(self.env, **p).shape[-1] for f, p in zip(self.term_funcs[group], self.term_params[group])]
+                for group in self.term_names
+            }
         return self._term_dims
 
     @property
-    def dim(self) -> int:
-        return sum(self.term_dims)
+    def group_dims(self) -> dict[str, int]:
+        return {group: sum(dims) for group, dims in self.term_dims.items()}
 
     def __repr__(self) -> str:
-        rows = [f"  {n:<20} {d:>3}" for n, d in zip(self.term_names, self.term_dims)]
-        return "ObservationGroup(\n" + "\n".join(rows) + f"\n  {'total':<20} {self.dim:>3}\n)"
+        lines = ["ObservationManager("]
+        for group in self.term_names:
+            lines.append(f"  [{group}] ({self.group_dims[group]})")
+            for name, f, d in zip(self.term_names[group], self.term_funcs[group], self.term_dims[group]):
+                lines.append(f"    {name:<20} {f.__name__:<20} {d:>3}")
+        return "\n".join(lines + [")"])
