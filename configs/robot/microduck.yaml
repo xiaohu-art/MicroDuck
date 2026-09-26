@@ -36,3 +36,6 @@ joints:
 kp: 0.55
 kv: 0.0
 effort_limit: 0.96
+
+feet_link_names: [ankle_left, ankle_right]
+contact_force_threshold: 1.0      # N; standing load is ~3.6 N per foot

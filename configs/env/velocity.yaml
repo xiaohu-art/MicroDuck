@@ -14,7 +14,8 @@ command:
 
 action:
   _target_: microduck.env.mdp.action.JointPositionAction
-  joint_names: [".*"]
+  # joint_names: [".*"]
+  joint_names: ["^(?!neck|head).*"]
 
 observation:
   _target_: microduck.env.mdp.observation.ObservationManager
@@ -42,6 +43,16 @@ reward:
     track_ang_vel_z:  {weight: 2.0, params: {std: 0.707}}   # sqrt(0.5)
     upright:          {weight: 2.0, params: {std: 0.224}}   # sqrt(0.05)
     action_rate_l2:   {weight: -0.1}
+    feet_air_time:
+      weight: 3.0
+      params: {threshold_min: 0.125, threshold_max: 0.3, command_threshold: 0.01}
+    pose:
+      weight: 1.0
+      params:
+        joint_names: ["^(?!neck|head).*"]   # legs only; head/neck are not pulled to default
+        walking_threshold: 0.01
+        std_standing: {".*hip_yaw.*": 0.1, ".*hip_roll.*": 0.05, ".*hip_pitch.*": 0.15, ".*knee.*": 0.15, ".*ankle.*": 0.1}
+        std_walking:  {".*hip_yaw.*": 0.3, ".*hip_roll.*": 0.05, ".*hip_pitch.*": 0.4, ".*knee.*": 0.4, ".*ankle.*": 0.25}
 
 termination:
   _target_: microduck.env.mdp.termination.TerminationManager

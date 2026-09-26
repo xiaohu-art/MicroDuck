@@ -68,6 +68,9 @@ class Env:
             self.motors_dof_idx,
         )
  
+        # Feet: local link indices, used for contact sensing.
+        self.feet_link_idx = [self.robot.get_link(name).idx_local for name in cfg.feet_link_names]
+
         # Default state, used at reset.
         self.default_joint_pos = self._tensor([j.default_pos for j in cfg.joints])
         self.init_base_pos = self._tensor(cfg.pos)
@@ -94,6 +97,11 @@ class Env:
         self.rew_buf = torch.zeros(n, dtype=gs.tc_float, device=device)
  
         self.gravity_vec = self._tensor([0.0, 0.0, -1.0]).repeat(n, 1)
+
+        # Per-foot time since the foot left / touched the ground [s], (num_envs, num_feet).
+        num_feet = len(self.feet_link_idx)
+        self.feet_air_time = torch.zeros(n, num_feet, dtype=gs.tc_float, device=device)
+        self.feet_contact_time = torch.zeros(n, num_feet, dtype=gs.tc_float, device=device)
 
         self.extras = {}
 
@@ -145,6 +153,15 @@ class Env:
         self.projected_gravity = transform_by_quat(self.gravity_vec, inv_q)
         self.dof_pos = self.robot.get_dofs_position(self.motors_dof_idx)
         self.dof_vel = self.robot.get_dofs_velocity(self.motors_dof_idx)
+        # Net contact force on each foot link (world frame), from the last physics step.
+        self.feet_contact_force = self.robot.get_links_net_contact_force()[:, self.feet_link_idx, :]
+        self.feet_contact = self.feet_contact_force.norm(dim=-1) > self.robot_cfg.contact_force_threshold
+
+
+    def _update_feet_timers(self, dt: float) -> None:
+        """Advance per-foot air / contact timers by one env step."""
+        self.feet_air_time = torch.where(self.feet_contact, 0.0, self.feet_air_time + dt)
+        self.feet_contact_time = torch.where(self.feet_contact, self.feet_contact_time + dt, 0.0)
 
 
     def reset_idx(self, envs_idx: torch.Tensor) -> None:
@@ -174,6 +191,8 @@ class Env:
         self.action_term.reset(envs_idx)
 
         self.episode_length_buf[envs_idx] = 0
+        self.feet_air_time[envs_idx] = 0.0
+        self.feet_contact_time[envs_idx] = 0.0
         self.reset_buf[envs_idx] = False
         self.time_out_buf[envs_idx] = False
 
@@ -196,6 +215,7 @@ class Env:
             self.scene.step()
         self.episode_length_buf += 1
         self._update_robot_state()
+        self._update_feet_timers(self.step_dt)
 
         # Termination, then reward.
         self.reset_buf = self.termination_manager.compute()

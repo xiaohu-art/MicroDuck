@@ -1,6 +1,10 @@
 """Reward terms and weighted reward manager."""
 
+import re
+
 import torch
+
+from ...utils import resolve_matching_names
 
 __all__ = [
     "RewardManager",
@@ -8,6 +12,8 @@ __all__ = [
     "track_ang_vel_z",
     "upright",
     "action_rate_l2",
+    "feet_air_time",
+    "pose",
 ]
 
 
@@ -40,11 +46,60 @@ def action_rate_l2(env) -> torch.Tensor:
     return (env.action_term.raw_actions - env.action_term.prev_actions).square().sum(dim=1)
 
 
+def _command_speed(env) -> torch.Tensor:
+    """Return the combined linear and angular command magnitude."""
+    cmd = env.command_term.command
+    return cmd[:, :2].norm(dim=1) + cmd[:, 2].abs()
+
+
+def feet_air_time(
+    env, threshold_min: float, threshold_max: float, command_threshold: float
+) -> torch.Tensor:
+    """Reward feet with swing duration in range when the command is active."""
+    air = env.feet_air_time
+    in_range = ((air > threshold_min) & (air < threshold_max)).float().sum(dim=1)
+    moving = (_command_speed(env) > command_threshold).float()
+    return in_range * moving
+
+
+# Per-joint std tensors of `pose`, resolved once per (joint pattern, std map).
+_POSE_CACHE: dict = {}
+
+
+def _resolve_pose_std(env, joint_names, std_map) -> tuple[list[int], torch.Tensor]:
+    """Return selected joint indices and their standard deviations."""
+    key = (tuple(joint_names), tuple(std_map.items()))
+    if key not in _POSE_CACHE:
+        joint_idx, names = resolve_matching_names(list(joint_names), env.motor_names)
+        # Every selected joint must match exactly one std pattern (raises otherwise).
+        _, covered = resolve_matching_names(list(std_map.keys()), names)
+        if len(covered) != len(names):
+            missing = sorted(set(names) - set(covered))
+            raise ValueError(f"pose std patterns {list(std_map)} do not cover joints {missing}")
+        stds = [next(float(v) for p, v in std_map.items() if re.fullmatch(p, n)) for n in names]
+        _POSE_CACHE[key] = (joint_idx, torch.tensor(stds, device=env.device))
+    return _POSE_CACHE[key]
+
+
+def pose(
+    env, joint_names, std_standing: dict, std_walking: dict, walking_threshold: float
+) -> torch.Tensor:
+    """Reward poses near default, using separate tolerances for standing and walking."""
+    idx, std_stand = _resolve_pose_std(env, joint_names, std_standing)
+    _, std_walk = _resolve_pose_std(env, joint_names, std_walking)
+    walking = (_command_speed(env) >= walking_threshold).unsqueeze(1)
+    std = torch.where(walking, std_walk, std_stand)
+    err = (env.dof_pos[:, idx] - env.default_joint_pos[idx]).square()
+    return torch.exp(-(err / std.square()).mean(dim=1))
+
+
 _REWARD_FUNCTIONS = {
     "track_lin_vel_xy": track_lin_vel_xy,
     "track_ang_vel_z": track_ang_vel_z,
     "upright": upright,
     "action_rate_l2": action_rate_l2,
+    "feet_air_time": feet_air_time,
+    "pose": pose,
 }
 
 
