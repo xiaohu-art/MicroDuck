@@ -70,6 +70,9 @@ class Env:
  
         # Feet: local link indices, used for contact sensing.
         self.feet_link_idx = [self.robot.get_link(name).idx_local for name in cfg.feet_link_names]
+        self.feet_site_offset = torch.tensor(
+            [list(o) for o in cfg.feet_site_offsets], dtype=gs.tc_float, device=self.device
+        )  # (num_feet, 3), in the foot link frame
 
         # Default state, used at reset.
         self.default_joint_pos = self._tensor([j.default_pos for j in cfg.joints])
@@ -102,6 +105,10 @@ class Env:
         num_feet = len(self.feet_link_idx)
         self.feet_air_time = torch.zeros(n, num_feet, dtype=gs.tc_float, device=device)
         self.feet_contact_time = torch.zeros(n, num_feet, dtype=gs.tc_float, device=device)
+        # Highest sole height of the current swing, and its value at touchdown.
+        self.feet_peak_height = torch.zeros(n, num_feet, dtype=gs.tc_float, device=device)
+        self.feet_landing_peak = torch.zeros(n, num_feet, dtype=gs.tc_float, device=device)
+        self.feet_first_contact = torch.zeros(n, num_feet, dtype=torch.bool, device=device)
 
         self.extras = {}
 
@@ -151,15 +158,34 @@ class Env:
         self.base_lin_vel = transform_by_quat(self.robot.get_vel(), inv_q)   # body frame
         self.base_ang_vel = transform_by_quat(self.robot.get_ang(), inv_q)   # body frame
         self.projected_gravity = transform_by_quat(self.gravity_vec, inv_q)
+        self.base_ang_vel_w = self.robot.get_ang()                            # world frame
         self.dof_pos = self.robot.get_dofs_position(self.motors_dof_idx)
         self.dof_vel = self.robot.get_dofs_velocity(self.motors_dof_idx)
         # Net contact force on each foot link (world frame), from the last physics step.
         self.feet_contact_force = self.robot.get_links_net_contact_force()[:, self.feet_link_idx, :]
         self.feet_contact = self.feet_contact_force.norm(dim=-1) > self.robot_cfg.contact_force_threshold
 
+        # Sole points (world frame): p = p_link + R_link r,  v = v_link + w_link x (R_link r).
+        link_pos = self.robot.get_links_pos(self.feet_link_idx)          # (N, F, 3)
+        link_quat = self.robot.get_links_quat(self.feet_link_idx)        # (N, F, 4)
+        link_vel = self.robot.get_links_vel(self.feet_link_idx)          # (N, F, 3)
+        link_ang = self.robot.get_links_ang(self.feet_link_idx)          # (N, F, 3)
+        offset_w = transform_by_quat(self.feet_site_offset.expand_as(link_pos), link_quat)
+        self.feet_pos = link_pos + offset_w
+        self.feet_vel = link_vel + torch.cross(link_ang, offset_w, dim=-1)
+        self.feet_height = self.feet_pos[..., 2]                         # flat ground at z = 0
+
 
     def _update_feet_timers(self, dt: float) -> None:
         """Advance per-foot air / contact timers by one env step."""
+        # Touchdown: in contact now, but was in the air at the previous step.
+        self.feet_first_contact = self.feet_contact & (self.feet_air_time > 0.0)
+        in_air = ~self.feet_contact
+        self.feet_peak_height = torch.where(
+            in_air, torch.maximum(self.feet_peak_height, self.feet_height), self.feet_peak_height
+        )
+        self.feet_landing_peak = torch.where(self.feet_first_contact, self.feet_peak_height, 0.0)
+        self.feet_peak_height = torch.where(self.feet_first_contact, 0.0, self.feet_peak_height)
         self.feet_air_time = torch.where(self.feet_contact, 0.0, self.feet_air_time + dt)
         self.feet_contact_time = torch.where(self.feet_contact, self.feet_contact_time + dt, 0.0)
 
@@ -193,6 +219,9 @@ class Env:
         self.episode_length_buf[envs_idx] = 0
         self.feet_air_time[envs_idx] = 0.0
         self.feet_contact_time[envs_idx] = 0.0
+        self.feet_peak_height[envs_idx] = 0.0
+        self.feet_landing_peak[envs_idx] = 0.0
+        self.feet_first_contact[envs_idx] = False
         self.reset_buf[envs_idx] = False
         self.time_out_buf[envs_idx] = False
 

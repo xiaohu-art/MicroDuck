@@ -14,6 +14,10 @@ __all__ = [
     "action_rate_l2",
     "feet_air_time",
     "pose",
+    "body_ang_vel",
+    "foot_clearance",
+    "foot_swing_height",
+    "foot_slip",
 ]
 
 
@@ -93,6 +97,37 @@ def pose(
     return torch.exp(-(err / std.square()).mean(dim=1))
 
 
+def _moving(env, command_threshold: float) -> torch.Tensor:
+    """Return a mask for commands above the motion threshold."""
+    return (_command_speed(env) > command_threshold).float()
+
+
+def body_ang_vel(env) -> torch.Tensor:
+    """Penalize base roll and pitch angular velocity."""
+    return env.base_ang_vel_w[:, :2].square().sum(dim=1)
+
+
+def foot_clearance(env, target_height: float, command_threshold: float) -> torch.Tensor:
+    """Penalize moving feet that deviate from the target height."""
+    speed_xy = env.feet_vel[..., :2].norm(dim=-1)
+    cost = ((env.feet_height - target_height).abs() * speed_xy).sum(dim=1)
+    return cost * _moving(env, command_threshold)
+
+
+def foot_swing_height(env, target_height: float, command_threshold: float) -> torch.Tensor:
+    """Penalize swing-height peaks that differ from the target height."""
+    error = (env.feet_landing_peak / target_height - 1.0).square()
+    cost = (error * env.feet_first_contact.float()).sum(dim=1)
+    return cost * _moving(env, command_threshold)
+
+
+def foot_slip(env, command_threshold: float) -> torch.Tensor:
+    """Penalize horizontal foot velocity during ground contact."""
+    speed_sq = env.feet_vel[..., :2].square().sum(dim=-1)
+    cost = (speed_sq * env.feet_contact.float()).sum(dim=1)
+    return cost * _moving(env, command_threshold)
+
+
 _REWARD_FUNCTIONS = {
     "track_lin_vel_xy": track_lin_vel_xy,
     "track_ang_vel_z": track_ang_vel_z,
@@ -100,6 +135,10 @@ _REWARD_FUNCTIONS = {
     "action_rate_l2": action_rate_l2,
     "feet_air_time": feet_air_time,
     "pose": pose,
+    "body_ang_vel": body_ang_vel,
+    "foot_clearance": foot_clearance,
+    "foot_swing_height": foot_swing_height,
+    "foot_slip": foot_slip,
 }
 
 

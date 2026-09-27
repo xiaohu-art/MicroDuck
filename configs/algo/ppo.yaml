@@ -1,5 +1,5 @@
 num_steps_per_env: 24
-max_iterations: 1500
+max_iterations: 1000
 save_interval: 100
 
 obs_groups:

@@ -27,6 +27,8 @@ class VelocityCommand:
         self.is_standing_env = torch.zeros(n, dtype=torch.bool, device=device)
         self.is_turn_env = torch.zeros(n, dtype=torch.bool, device=device)
 
+        self.fixed_command: torch.Tensor | None = None
+
         self.metrics = {
             "error_vel_xy": torch.zeros(n, dtype=gs.tc_float, device=device),
             "error_vel_yaw": torch.zeros(n, dtype=gs.tc_float, device=device),
@@ -75,8 +77,22 @@ class VelocityCommand:
         self._resample_command(envs_idx)
 
 
+    def set_fixed_command(self, command) -> None:
+        """Use a fixed (vx, vy, wz) for all envs."""
+        if command is None:
+            self.fixed_command = None
+            return
+        self.fixed_command = torch.as_tensor(command, dtype=gs.tc_float, device=self.device).reshape(3)
+        self._resample_command(torch.arange(self.num_envs, device=self.device))
+
     def _resample_command(self, envs_idx: torch.Tensor) -> None:
         n = len(envs_idx)
+
+        if self.fixed_command is not None:
+            self.vel_command_b[envs_idx] = self.fixed_command
+            self.is_standing_env[envs_idx] = bool((self.fixed_command == 0).all())
+            self.is_turn_env[envs_idx] = False
+            return
  
         # Default bucket: independent uniform sampling.
         self.vel_command_b[envs_idx, 0] = self._uniform(n, self.lin_vel_x)

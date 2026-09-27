@@ -39,3 +39,6 @@ effort_limit: 0.96
 
 feet_link_names: [ankle_left, ankle_right]
 contact_force_threshold: 1.0      # N; standing load is ~3.6 N per foot
+feet_site_offsets:
+  - [0.0, -0.0238146, -0.0140852]
+  - [0.0, -0.0238146, -0.0140852]
