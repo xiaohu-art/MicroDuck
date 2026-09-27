@@ -74,29 +74,34 @@ def main() -> None:
     print(f"[play] loaded iteration {loaded.get('iter')}")
 
     command = env.command_term
-    steps_per_s = round(1.0 / env.step_dt)
     steps_per_segment = round(SEGMENT_S / env.step_dt)
     total_steps = steps_per_segment * len(DEMO_SCHEDULE)
-    video_dir = os.path.join(REPO_ROOT, "outputs", "videos")
+
+    run_dir = os.path.dirname(checkpoint)                            # outputs/<date>/<time>
+    video_dir = os.path.join(run_dir, "videos")
     os.makedirs(video_dir, exist_ok=True)
-    video_path = os.path.join(video_dir, f"play_{datetime.now():%Y%m%d_%H%M%S}.mp4")
+    model_name = os.path.splitext(os.path.basename(checkpoint))[0]   # model_999
+    video_path = os.path.join(video_dir, f"{model_name}.mp4")
+
     env.record_camera.start_recording(video_path, fps=50)
     print(f"[play] recording video: {video_path}")
 
-    status_table = PrettyTable()
-    status_table.field_names = [
-        "Time (s)",
+    summary_table = PrettyTable()
+    summary_table.title = "Demo Schedule Summary"
+    summary_table.field_names = [
         "Segment",
         "Cmd vx",
         "Cmd vy",
         "Cmd wz",
-        "Meas vx",
-        "Meas vy",
-        "Meas wz",
-        "Height (m)",
+        "Avg vx",
+        "Avg vy",
+        "Avg wz",
+        "Avg z (m)",
     ]
-    status_table.align["Segment"] = "l"
+    summary_table.align["Segment"] = "l"
     vel_sum = torch.zeros(3, device=env.device)
+    height_sum = 0.0
+    segment_steps = 0
     step = 0
     try:
         with torch.inference_mode():
@@ -111,26 +116,36 @@ def main() -> None:
                 step += 1
 
                 vel_sum += torch.stack([env.base_lin_vel[0, 0], env.base_lin_vel[0, 1], env.base_ang_vel[0, 2]])
+                height_sum += env.base_pos[0, 2].item()
+                segment_steps += 1
                 if dones[0]:
                     print(f"{step * env.step_dt:6.1f}  ** fell, reset **")
-                if step % steps_per_s == 0:
-                    c = command.command[0].tolist()
-                    m = (vel_sum / steps_per_s).tolist()
-                    status_table.clear_rows()
-                    status_table.add_row(
+                if segment_steps == steps_per_segment:
+                    m = (vel_sum / segment_steps).tolist()
+                    summary_table.add_row(
                         [
-                            f"{step * env.step_dt:.1f}",
                             segment,
-                            *(f"{value:.2f}" for value in c),
+                            *(f"{value:.2f}" for value in cmd),
                             *(f"{value:.2f}" for value in m),
-                            f"{env.base_pos[0, 2].item():.3f}",
+                            f"{height_sum / segment_steps:.3f}",
                         ]
                     )
-                    print(status_table)
                     vel_sum.zero_()
+                    height_sum = 0.0
+                    segment_steps = 0
     except KeyboardInterrupt:
         print("[play] interrupted")
     finally:
+        if segment_steps:
+            summary_table.add_row(
+                [
+                    f"{segment} (partial)",
+                    *(f"{value:.2f}" for value in cmd),
+                    *(f"{value:.2f}" for value in (vel_sum / segment_steps).tolist()),
+                    f"{height_sum / segment_steps:.3f}",
+                ]
+            )
+        print(summary_table)
         env.record_camera.stop_recording()
         print(f"[play] video saved: {video_path}")
 
