@@ -16,6 +16,8 @@ action:
   _target_: microduck.env.mdp.action.JointPositionAction
   # joint_names: [".*"]
   joint_names: ["^(?!neck|head).*"]
+  scale: 1.0
+  clip: null
 
 observation:
   _target_: microduck.env.mdp.observation.ObservationManager
