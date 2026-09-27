@@ -15,11 +15,12 @@ class Env:
         env_cfg,
         robot_cfg,
         show_viewer=False,
+        record_video: bool = False,
     ) -> None:
         self.env_cfg = env_cfg
         self.robot_cfg = robot_cfg
 
-        self._init_scene(show_viewer)
+        self._init_scene(show_viewer, record_video)
         self._init_robot()
         self._init_mdp()
         self._init_buffers()
@@ -27,7 +28,7 @@ class Env:
         self._update_robot_state()
 
 
-    def _init_scene(self, show_viewer: bool = False) -> None:
+    def _init_scene(self, show_viewer: bool = False, record_video: bool = False) -> None:
         """Create the scene, add ground and robot, then build it."""
         self.scene = gs.Scene(
             sim_options=gs.options.SimOptions(dt=self.physics_dt),
@@ -45,7 +46,17 @@ class Env:
                 file=str(resolve_model_path(self.robot_cfg.model_path))
             )
         )
+        if record_video:
+            self.record_camera = self.scene.add_camera(
+                res=(640, 480),
+                pos=(0.65, -0.9, 0.45),
+                lookat=(0.0, 0.0, 0.15),
+                fov=45,
+                debug=True,
+            )
         self.scene.build(n_envs=self.num_envs, env_spacing=(0.5, 0.5))
+        if record_video:
+            self.record_camera.follow_entity(self.robot, fix_orientation=True)
         if show_viewer:
             self.scene.viewer.follow_entity(self.robot)
 
