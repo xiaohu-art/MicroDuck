@@ -11,6 +11,8 @@ __all__ = [
     "joint_pos_rel",
     "joint_vel",
     "last_action",
+    "feet_contact",
+    "feet_air_time",
 ]
 
 
@@ -52,6 +54,18 @@ def last_action(env) -> torch.Tensor:
     return env.action_term.raw_actions
 
 
+def feet_contact(env) -> torch.Tensor:
+    """1.0 for each foot touching the ground, else 0.0. Privileged: critic only."""
+    return env.feet_contact.float()
+
+
+def feet_air_time(env) -> torch.Tensor:
+    """Time since each foot left the ground [s] (0 while in contact).
+    Privileged: critic only.
+    """
+    return env.feet_air_time
+
+
 _OBSERVATION_FUNCTIONS = {
     "base_lin_vel": base_lin_vel,
     "base_ang_vel": base_ang_vel,
@@ -60,6 +74,8 @@ _OBSERVATION_FUNCTIONS = {
     "joint_pos_rel": joint_pos_rel,
     "joint_vel": joint_vel,
     "last_action": last_action,
+    "feet_contact": feet_contact,
+    "feet_air_time": feet_air_time,
 }
 
 
