@@ -75,7 +75,17 @@ Each run creates a directory `outputs/<date>/<time>/` containing:
 |---|---|
 | `model_*.pt` | checkpoint saved every `save_interval` iterations |
 | `events.out.tfevents.*` | TensorBoard logs |
+| `train.log` | console output of the run |
+| `videos/model_*.mp4` | video recorded by `play.py` |
 | `.hydra/config.yaml` | the full config of this run (read by `play.py`) |
+
+Override `hydra.run.dir` to give a run a readable name instead of a timestamp,
+for example `hydra.run.dir=outputs/baseline`. The assignment commands below do
+this; keep the directories under `outputs/` so that `play.py` can find them.
+
+One run of the default config (1000 iterations, 4096 environments) takes about 25
+minutes on an Apple Silicon laptop, so the six experiments below add up to
+roughly 2.5 hours of training. Plan accordingly.
 
 ### Training curves
 
@@ -102,7 +112,7 @@ uv run scripts/play.py --headless   # without the viewer
 
 ## Assignments (100 points)
 
-Compare every experiment against the baseline (default config). **Change one thing only**; keep all other settings, the random seed and the number of iterations the same. For each experiment, your report should include:
+Compare every experiment against the baseline (default config). **Change one thing only**; keep all other settings, the random seed and the number of iterations the same. Each command writes to its own named directory under `outputs/`, so that `tensorboard --logdir outputs` labels every curve with the experiment it came from. For each experiment, your report should include:
 
 1. the relevant training curves, plotted together with the baseline;
 2. the summary table printed by `play.py` and recorded video;
@@ -110,10 +120,10 @@ Compare every experiment against the baseline (default config). **Change one thi
 
 ### 1. Train the baseline (20 points)
 
-Train with the default config, then play the resulting checkpoint. Use its curves, schedule summary, and video as the baseline for the experiments below.
+Train with the default config, then play the resulting checkpoint. Use its curves, summary table, and video as the baseline for the experiments below.
 
 ```bash
-uv run scripts/train.py
+uv run scripts/train.py hydra.run.dir=outputs/baseline
 uv run scripts/play.py
 ```
 
@@ -121,6 +131,7 @@ uv run scripts/play.py
 
 ```bash
 uv run scripts/train.py \
+  hydra.run.dir=outputs/exp2_no_standing_no_turn \
   env.command.standing_prob=0 \
   env.command.turn_in_place_prob=0
 ```
@@ -131,6 +142,7 @@ By default, a fraction of the environments sample a zero command (standing) or a
 
 ```bash
 uv run scripts/train.py \
+  hydra.run.dir=outputs/exp3_no_privileged_critic \
   'algo.obs_groups.critic=[policy]'
 ```
 
@@ -140,16 +152,18 @@ By default, the critic receives base linear velocity, foot contacts, and foot ai
 
 ```bash
 uv run scripts/train.py \
+  hydra.run.dir=outputs/exp4_no_obs_norm \
   algo.actor.obs_normalization=false \
   algo.critic.obs_normalization=false
 ```
 
-Observation terms have very different scales (joint velocities, gravity direction, commands, ...). Whta is the effect of observation normalization? Without normalization, does training become slower or less stable?
+Observation terms have very different scales (joint velocities, gravity direction, commands, ...). What is the effect of observation normalization? Without normalization, does training become slower or less stable?
 
 ### 5. Action clipping: `clip: null` vs. `clip: 1.0` (15 points)
 
 ```bash
 uv run scripts/train.py \
+  hydra.run.dir=outputs/exp5_action_clip \
   env.action.clip=1.0
 ```
 
@@ -162,6 +176,8 @@ In the baseline, measured lateral velocity during the left and right segments is
 - your hypothesis, supported by evidence such as reward terms, joint motion, or gait;
 - the change you made and why it addresses the suspected cause;
 - baseline-versus-modified lateral tracking, plus any effects on forward, backward, and turning performance.
+
+Train your modified config the same way, e.g. `hydra.run.dir=outputs/exp6_lateral`.
 
 ## References
 

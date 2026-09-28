@@ -11,6 +11,6 @@ def resolve_model_path(value: str) -> Path:
 
     path = path.resolve()
     if not path.is_file():
-        raise FileNotFoundError(f"MJCF 文件不存在：{path}")
+        raise FileNotFoundError(f"MJCF file not found: {path}")
 
     return path

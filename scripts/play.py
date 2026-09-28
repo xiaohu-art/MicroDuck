@@ -103,6 +103,7 @@ def main() -> None:
     height_sum = 0.0
     segment_steps = 0
     step = 0
+    segment, cmd = DEMO_SCHEDULE[0]
     try:
         with torch.inference_mode():
             while step < total_steps:
