@@ -2,24 +2,21 @@
 
 ![MicroDuck walking in simulation](docs/assets/microduck.png)
 
-Train MicroDuck, a 15 cm tall bipedal duck robot, to follow velocity commands with reinforcement learning.
-
 ## Purpose
 
-Legged locomotion is one of the most mature applications of reinforcement learning in embodied AI: thousands of robots run in parallel in simulation, and PPO learns a policy that maps a desired velocity to joint position targets. 
+Legged locomotion is one of the most mature applications of reinforcement learning in embodied AI: thousands of robots run in parallel in simulation, and PPO learns a policy that maps a velocity command to target joint position. 
 
 This homework provides a complete, compact and readable training pipeline. The goal is not to write PPO from scratch, but to:
 
 - **Understand a real RL training system**: how the environment is organized (commands, observations, actions, rewards, terminations) and how data flows through PPO (rollout → GAE → update);
-- **Understand design choices through ablations**: every default in the code is there for a reason. What happens when you remove it, and why?
-- **Support conclusions with data**: training curves, play statistics and videos, not intuition.
+- **Understand design choices through ablations**: change one default at a time, observe its effects, and explain why they occur.
 
 Code layout:
 
 ```
 configs/                   # hydra configs
   env/velocity.yaml        # commands, actions, observations, rewards, terminations
-  robot/microduck.yaml     # joints, PD gains, feet
+  robot/microduck.yaml     # joints, PD gains, feet contact
   algo/ppo.yaml            # networks and PPO hyperparameters
 src/microduck/
   env/environment.py       # Genesis simulation environment
@@ -34,7 +31,7 @@ scripts/
 
 ### 1. Install uv
 
-Install [uv](https://docs.astral.sh/uv/) using the instructions for your operating system.
+Install [uv](https://docs.astral.sh/uv/) following the instructions for your operating system.
 
 ### 2. Install the project environment
 
@@ -46,8 +43,6 @@ uv sync                  # macOS (Apple Silicon, Metal GPU backend)
 uv sync --extra cuda     # Linux / Windows with an NVIDIA GPU
 uv sync --extra cpu      # Linux / Windows without a GPU
 ```
-
-Without a GPU, add `backend=cpu` to the training command (see below).
 
 ## Basic Commands
 
@@ -80,12 +75,7 @@ Each run creates a directory `outputs/<date>/<time>/` containing:
 | `.hydra/config.yaml` | the full config of this run (read by `play.py`) |
 
 Override `hydra.run.dir` to give a run a readable name instead of a timestamp,
-for example `hydra.run.dir=outputs/baseline`. The assignment commands below do
-this; keep the directories under `outputs/` so that `play.py` can find them.
-
-One run of the default config (1000 iterations, 4096 environments) takes about 25
-minutes on an Apple Silicon laptop, so the six experiments below add up to
-roughly 2.5 hours of training. Plan accordingly.
+for example `hydra.run.dir=outputs/baseline`.
 
 ### Training curves
 
@@ -114,8 +104,7 @@ uv run scripts/play.py --headless   # without the viewer
 
 Compare every experiment against the baseline (default config). **Change one thing only**; keep all other settings, the random seed and the number of iterations the same. Each command writes to its own named directory under `outputs/`, so that `tensorboard --logdir outputs` labels every curve with the experiment it came from. For each experiment, your report should include:
 
-1. the relevant training curves, plotted together with the baseline;
-2. the summary table printed by `play.py` and recorded video;
+1. the summary table printed by `play.py` and recorded video;
 3. the differences you observe, and **why** they happen.
 
 ### 1. Train the baseline (20 points)
@@ -127,7 +116,7 @@ uv run scripts/train.py hydra.run.dir=outputs/baseline
 uv run scripts/play.py
 ```
 
-### 2. No standing / turn-in-place environments (15 points)
+### 2. No standing / turn-in-place environments (20 points)
 
 ```bash
 uv run scripts/train.py \
@@ -138,7 +127,7 @@ uv run scripts/train.py \
 
 By default, a fraction of the environments sample a zero command (standing) or a pure yaw-rate command (turning in place). Without them, how does the policy behave in the stand, turn left and turn right segments of `play.py`? Why are uniformly sampled commands not enough to learn these behaviors?
 
-### 3. No privileged observations for the critic (15 points)
+### 3. No privileged observations for the critic (20 points)
 
 ```bash
 uv run scripts/train.py \
@@ -167,9 +156,9 @@ uv run scripts/train.py \
   env.action.clip=1.0
 ```
 
-By default, the policy output is not clipped. With clipping to [-1, 1], look at `Policy/mean_std` and `Metrics/error_vel_yaw`, and describe the robot's behavior in the video. Explain from the perspective of a Gaussian policy: once actions are clipped, what does the exploration noise beyond the range mean for the return and for the gradient?
+By default, the policy output is not clipped. With clipping to [-1, 1], describe the robot's behavior in the video. Explain from the perspective of a Gaussian policy: once actions are clipped, what does the exploration noise beyond the range mean for the return and for the gradient?
 
-### 6. Lateral walking (20 points)
+### 6. Lateral walking (10 points)
 
 In the baseline, measured lateral velocity during the left and right segments is substantially below the commanded velocity. Investigate the cause, propose one targeted change, and test whether it improves lateral tracking. Your report should include:
 
@@ -178,6 +167,30 @@ In the baseline, measured lateral velocity during the left and right segments is
 - baseline-versus-modified lateral tracking, plus any effects on forward, backward, and turning performance.
 
 Train your modified config the same way, e.g. `hydra.run.dir=outputs/exp6_lateral`.
+
+## Submission
+
+Submit one ZIP archive named `Name_StudentID.zip` containing:
+
+```
+Name_StudentID.zip
+├── report.pdf
+├── configs/
+│   └── exp6_lateral.yaml
+└── videos/
+  ├── baseline.mp4
+  ├── exp2_no_standing_no_turn.mp4
+  ├── exp3_no_privileged_critic.mp4
+  ├── exp4_no_obs_norm.mp4
+  ├── exp5_action_clip.mp4
+  └── exp6_lateral.mp4
+```
+
+Your PDF report should include:
+
+- **Experimental setup:** the random seed, number of training iterations, and the setting changed in each experiment.
+- **Results:** relevant training curves for each experiment, plotted together with the baseline, and the velocity summary table printed by `play.py`.
+- **Analysis:** describe the observed behavioral differences and explain why they occurred. For Experiment 6, include your hypothesis and supporting evidence, the targeted change you made, and its effects on lateral, forward, backward, and turning performance.
 
 ## References
 
